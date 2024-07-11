@@ -1,44 +1,186 @@
 Shader "Hidden/Solver" {
     Properties {
-        _MainTex ("Texture", 2D) = "white" {}
     }
     SubShader {
         Cull Off ZWrite Off ZTest Always
 
+CGINCLUDE
+struct appdata {
+    float4 vertex : POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+struct v2fbase {
+    float4 vertex : SV_POSITION;
+    float2 vUv : TEXCOORD0;
+    float2 vL : TEXCOORD1;
+    float2 vR : TEXCOORD2;
+    float2 vT : TEXCOORD3;
+    float2 vB : TEXCOORD4;
+};
+struct v2fblur {
+    float4 vertex : SV_POSITION;
+    float2 vUv : TEXCOORD0;
+    float2 vL : TEXCOORD1;
+    float2 vR : TEXCOORD2;
+    float2 vT : TEXCOORD3;
+    float2 vB : TEXCOORD4;
+};
+
+sampler2D _MainTex;
+sampler2D _UVelocity;
+sampler2D _USource;
+sampler2D _UCurl;
+sampler2D _UPressure;
+sampler2D _UDivergence;
+
+float4 _MainTex_TexelSize;
+
+float4 _Color;
+
+float _ClearValue;
+float _AspectRatio;
+float2 _Point;
+
+float _Radius;
+float _Dt;
+float _Dissipation;
+
+v2fbase baseVertexShader (appdata v) {
+    v2fbase o;
+    o.vertex = UnityObjectToClipPos(v.vertex);
+    o.vUv = v.uv;
+    o.vL = o.vUv - float2(_MainTex_TexelSize.x, 0.0);
+    o.vR = o.vUv + float2(_MainTex_TexelSize.x, 0.0);
+    o.vT = o.vUv + float2(0.0, _MainTex_TexelSize.y);
+    o.vB = o.vUv - float2(0.0, _MainTex_TexelSize.y);
+    return o;
+}
+
+float4 copyShader(v2fbase i) : SV_Target {
+	return tex2D(_MainTex, i.vUv);
+}
+
+float4 clearShader(v2fbase i) : SV_Target {
+	return _ClearValue * tex2D(_MainTex, i.vUv);
+}
+
+float4 colorShader(v2fbase i) : SV_Target {
+	return _Color;
+}
+
+float4 checkerboardShader(v2fbase i) : SV_Target {
+	float SCALE = 25.0;
+	float2 uv = floor(i.vUv * SCALE * float2(_AspectRatio, 1.0));
+	float v = fmod(uv.x + uv.y, 2.0);
+	v = v * 0.1 + 0.8;
+	return float4(v, v, v, 1.0);
+}
+
+float4 displayShaderSource(v2fbase i) : SV_Target {
+	float3 c = tex2D(_MainTex, i.vUv).rgb;
+    float a = max(c.r, max(c.g, c.b));
+    return float4(c, a);
+}
+
+float4 splatShader(v2fbase i) : SV_Target {
+	float2 p = i.vUv - _Point.xy;
+	p.x *= _AspectRatio;
+	float3 splat = exp(-dot(p, p) / _Radius) * _Color.xyz;
+	float3 base = tex2D(_MainTex, i.vUv).xyz;
+	return float4(base + splat, 1.0);
+}
+
+float4 advectionShader(v2fbase i) : SV_Target {
+	float2 coord = i.vUv - _Dt * tex2D(_UVelocity, i.vUv).xy * _MainTex_TexelSize.xy;
+	float4 result = tex2D(_USource, coord);
+    float decay = 1.0 + _Dissipation * _Dt;
+	return result / decay;
+}
+
+float4 divergenceShader(v2fbase i) : SV_Target {
+	float L = tex2D(_UVelocity, i.vL).x;
+	float R = tex2D(_UVelocity, i.vR).x;
+	float T = tex2D(_UVelocity, i.vT).y;
+	float B = tex2D(_UVelocity, i.vB).y;
+
+	float2 C = tex2D(_UVelocity, i.vUv).xy;
+	if (i.vL.x < 0.0) { L = -C.x; }
+	if (i.vR.x > 1.0) { R = -C.x; }
+	if (i.vT.y > 1.0) { T = -C.y; }
+	if (i.vB.y < 0.0) { B = -C.y; }
+
+	float div = 0.5 * (R - L + T - B);
+	return float4(div, 0.0, 0.0, 1.0);
+}
+
+float4 curlShader(v2fbase i) : SV_Target {
+	float L = tex2D(_UVelocity, i.vL).y;
+	float R = tex2D(_UVelocity, i.vR).y;
+	float T = tex2D(_UVelocity, i.vT).x;
+	float B = tex2D(_UVelocity, i.vB).x;
+	float vorticity = R - L - T + B;
+	return float4(0.5 * vorticity, 0.0, 0.0, 1.0);
+}
+
+float4 vorticityShader(v2fbase i) : SV_Target {
+	float L = tex2D(_UCurl, i.vL).x;
+	float R = tex2D(_UCurl, i.vR).x;
+	float T = tex2D(_UCurl, i.vT).x;
+	float B = tex2D(_UCurl, i.vB).x;
+	float C = tex2D(_UCurl, i.vUv).x;
+
+	float2 force = 0.5 * float2(abs(T) - abs(B), abs(R) - abs(L));
+	force /= length(force) + 0.0001;
+	force *= 0.1 * C;
+	force.y *= -1.0;
+
+	float2 velocity = tex2D(_UVelocity, i.vUv).xy;
+	velocity += force * _Dt;
+	velocity = min(max(velocity, -1000.0), 1000.0);
+	return float4(velocity, 0.0, 1.0);
+}
+
+float4 pressureShader(v2fbase i) : SV_Target {
+	float L = tex2D(_UPressure, i.vL).x;
+	float R = tex2D(_UPressure, i.vR).x;
+	float T = tex2D(_UPressure, i.vT).x;
+	float B = tex2D(_UPressure, i.vB).x;
+	float C = tex2D(_UPressure, i.vUv).x;
+	float divergence = tex2D(_UDivergence, i.vUv).x;
+	float pressure = (L + R + B + T - divergence) * 0.25;
+	return float4(pressure, 0.0, 0.0, 1.0);
+}
+
+float4 gradientSubtractShader(v2fbase i) : SV_Target {
+	float L = tex2D(_UPressure, i.vL).x;
+	float R = tex2D(_UPressure, i.vR).x;
+	float T = tex2D(_UPressure, i.vT).x;
+	float B = tex2D(_UPressure, i.vB).x;
+	float2 velocity = tex2D(_UVelocity, i.vUv).xy;
+	velocity.xy -= float2(R - L, T - B);
+	return float4(velocity, 0.0, 1.0);
+}
+ENDCG
+
         Pass {
-            CGPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
+CGPROGRAM
+#pragma vertex baseVertexShader
+#pragma fragment frag
 
-            #include "UnityCG.cginc"
+#include "UnityCG.cginc"
 
-            struct appdata {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
-
-            struct v2f {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-            };
-
-            v2f vert (appdata v) {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = v.uv;
-                return o;
-            }
-
-            sampler2D _MainTex;
-
-            float4 frag (v2f i) : SV_Target {
-                float4 col = tex2D(_MainTex, i.uv);
-                return col;
-            }
-            ENDCG
+float4 frag (v2fbase i) : SV_Target {
+    float4 col = tex2D(_MainTex, i.vUv);
+    return col;
+}
+ENDCG
         }
     }
 }
+
+// https://github.com/PavelDoGreat/WebGL-Fluid-Simulation/blob/54ed78b00d7d8209790dd167dece747bfe9c5b88/script.js
+// https://developer.nvidia.com/gpugems/gpugems/part-vi-beyond-triangles/chapter-38-fast-fluid-dynamics-simulation-gpu
 
 // const baseVertexShader = compileShader(gl.VERTEX_SHADER, `
 //     precision highp float;
