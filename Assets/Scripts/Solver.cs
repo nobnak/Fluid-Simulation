@@ -1,48 +1,93 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Mathematics;
 using Unity.VisualScripting.Antlr3.Runtime;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
 public class Solver : System.IDisposable {
-    public void Dispose() {
-        throw new System.NotImplementedException();
+
+    protected Config config;
+
+    protected DoubleBuffer dye;
+    protected DoubleBuffer velocity;
+    protected RenderTexture divergence;
+    protected RenderTexture curl;
+    protected DoubleBuffer pressure;
+
+
+    public int2 GetResolution(int2 screen, int res) {
+        var aspect = screen.x / (float)screen.y;
+        if (screen.x < screen.y)
+            return new int2(res, (int)math.round(res / aspect));
+        else
+            return new int2((int)math.round(res * aspect), res);
+    }
+    public void InitFramebuffers() {
+        var screenSize = new int2(Screen.width, Screen.height);
+        var simRes = GetResolution(screenSize, config.SIM_RESOLUTION);
+        var dyeRes = GetResolution(screenSize, config.DYE_RESOLUTION);
+
+        var rgba = RenderTextureFormat.ARGBHalf;
+        var rg = RenderTextureFormat.RGHalf;
+        var r = RenderTextureFormat.RHalf;
+        var filtering = FilterMode.Bilinear;
+
+        if (dye == null)
+            dye = new DoubleBuffer(dyeRes.x, dyeRes.y, rgba, filtering, TextureWrapMode.Clamp);
+        else
+            dye.Resize(dyeRes.x, dyeRes.y);
+
+        if (velocity == null)
+            velocity = new DoubleBuffer(simRes.x, simRes.y, rg, filtering, TextureWrapMode.Clamp);
+        else
+            velocity.Resize(simRes.x, simRes.y);
+
+        if (divergence == null)
+            divergence = new RenderTexture(simRes.x, simRes.y, 0, r, RenderTextureReadWrite.Linear);
+        else
+            divergence.Resize(simRes.x, simRes.y);
+
+        if (curl == null)
+            curl = new RenderTexture(simRes.x, simRes.y, 0, r, RenderTextureReadWrite.Linear);
+        else
+            curl.Resize(simRes.x, simRes.y);
+
+        if (pressure == null)
+            pressure = new DoubleBuffer(simRes.x, simRes.y, r, filtering, TextureWrapMode.Clamp);
+        else
+            pressure.Resize(simRes.x, simRes.y);
     }
 
+    #region IDisposable
+    public void Dispose() {
+        if (dye != null) {
+            dye.Dispose();
+            dye = null;
+        }
+        if (velocity != null) {
+            velocity.Dispose();
+            velocity = null;
+        }
+        if (divergence != null) {
+            Object.Destroy(divergence);
+            divergence = null;
+        }
+        if (curl != null) {
+            Object.Destroy(curl);
+            curl = null;
+        }
+        if (pressure != null) {
+            pressure.Dispose();
+            pressure = null;
+        }
+    }
+    #endregion
+
+    #region DoubleBuffer
     public class DoubleBuffer : System.IDisposable {
 
         protected RenderTexture tex0, tex1;
-
-        public void InitFramebuffers() {
-
-
-            //let simRes = getResolution(config.SIM_RESOLUTION);
-            //let dyeRes = getResolution(config.DYE_RESOLUTION);
-
-            //const texType = ext.halfFloatTexType;
-            //const rgba    = ext.formatRGBA;
-            //const rg      = ext.formatRG;
-            //const r       = ext.formatR;
-            //const filtering = ext.supportLinearFiltering ? gl.LINEAR : gl.NEAREST;
-
-            //gl.disable(gl.BLEND);
-
-            //if (dye == null)
-            //    dye = createDoubleFBO(dyeRes.width, dyeRes.height, rgba.internalFormat, rgba.format, texType, filtering);
-            //else
-            //    dye = resizeDoubleFBO(dye, dyeRes.width, dyeRes.height, rgba.internalFormat, rgba.format, texType, filtering);
-
-            //if (velocity == null)
-            //    velocity = createDoubleFBO(simRes.width, simRes.height, rg.internalFormat, rg.format, texType, filtering);
-            //else
-            //    velocity = resizeDoubleFBO(velocity, simRes.width, simRes.height, rg.internalFormat, rg.format, texType, filtering);
-
-            //divergence = createFBO(simRes.width, simRes.height, r.internalFormat, r.format, texType, gl.NEAREST);
-            //curl = createFBO(simRes.width, simRes.height, r.internalFormat, r.format, texType, gl.NEAREST);
-            //pressure = createDoubleFBO(simRes.width, simRes.height, r.internalFormat, r.format, texType, gl.NEAREST);
-
-        }
-
         public DoubleBuffer(int width, int height, RenderTextureFormat format, FilterMode filter, TextureWrapMode wrap) {
             tex0 = new RenderTexture(width, height, 0, format, RenderTextureReadWrite.Linear);
             tex1 = new RenderTexture(width, height, 0, format, RenderTextureReadWrite.Linear);
@@ -54,6 +99,18 @@ public class Solver : System.IDisposable {
         public RenderTexture Read { get => tex0; }
         public RenderTexture Write { get => tex1; }
 
+        public DoubleBuffer Resize(int width, int height) {
+            tex0.Resize(width, height);
+            tex1.Resize(width, height);
+            return this;
+        }
+        public void Swap() {
+            var temp = tex0;
+            tex0 = tex1;
+            tex1 = temp;
+        }
+
+        #region IDisposable
         public void Dispose() {
             if (tex0 != null) {
                 Object.Destroy(tex0);
@@ -64,7 +121,9 @@ public class Solver : System.IDisposable {
                 tex1 = null;
             }
         }
+        #endregion
     }
+    #endregion
 
     #region declarations
     [System.Serializable]
@@ -91,3 +150,14 @@ public class Solver : System.IDisposable {
     }
     #endregion
 }
+
+public static class RenderTextureExtensions {
+    public static RenderTexture Resize(this RenderTexture renderTexture, int width, int height) {
+        if (renderTexture.width == width && renderTexture.height == height)
+            return renderTexture;
+        renderTexture.Release();
+        renderTexture.width = width;
+        renderTexture.height = height;
+        renderTexture.Create();
+        return renderTexture;
+    }
