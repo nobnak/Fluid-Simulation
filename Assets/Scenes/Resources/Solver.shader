@@ -5,6 +5,8 @@ Shader "Hidden/Solver" {
         Cull Off ZWrite Off ZTest Always
 
 CGINCLUDE
+#include "UnityCG.cginc"
+
 struct appdata {
     float4 vertex : POSITION;
     float2 uv : TEXCOORD0;
@@ -27,14 +29,14 @@ struct v2fblur {
     float2 vB : TEXCOORD4;
 };
 
-sampler2D _MainTex;
+sampler2D _UTexture;
 sampler2D _UVelocity;
 sampler2D _USource;
 sampler2D _UCurl;
 sampler2D _UPressure;
 sampler2D _UDivergence;
 
-float4 _MainTex_TexelSize;
+float4 _TexelSize;
 
 float4 _Color;
 
@@ -45,24 +47,25 @@ float2 _Point;
 float _Radius;
 float _Dt;
 float _Dissipation;
+float _Curl;
 
 v2fbase baseVertexShader (appdata v) {
     v2fbase o;
     o.vertex = UnityObjectToClipPos(v.vertex);
     o.vUv = v.uv;
-    o.vL = o.vUv - float2(_MainTex_TexelSize.x, 0.0);
-    o.vR = o.vUv + float2(_MainTex_TexelSize.x, 0.0);
-    o.vT = o.vUv + float2(0.0, _MainTex_TexelSize.y);
-    o.vB = o.vUv - float2(0.0, _MainTex_TexelSize.y);
+    o.vL = o.vUv - float2(_TexelSize.x, 0.0);
+    o.vR = o.vUv + float2(_TexelSize.x, 0.0);
+    o.vT = o.vUv + float2(0.0, _TexelSize.y);
+    o.vB = o.vUv - float2(0.0, _TexelSize.y);
     return o;
 }
 
 float4 copyShader(v2fbase i) : SV_Target {
-	return tex2D(_MainTex, i.vUv);
+	return tex2D(_UTexture, i.vUv);
 }
 
 float4 clearShader(v2fbase i) : SV_Target {
-	return _ClearValue * tex2D(_MainTex, i.vUv);
+	return _ClearValue * tex2D(_UTexture, i.vUv);
 }
 
 float4 colorShader(v2fbase i) : SV_Target {
@@ -78,7 +81,7 @@ float4 checkerboardShader(v2fbase i) : SV_Target {
 }
 
 float4 displayShaderSource(v2fbase i) : SV_Target {
-	float3 c = tex2D(_MainTex, i.vUv).rgb;
+	float3 c = tex2D(_UTexture, i.vUv).rgb;
     float a = max(c.r, max(c.g, c.b));
     return float4(c, a);
 }
@@ -87,12 +90,12 @@ float4 splatShader(v2fbase i) : SV_Target {
 	float2 p = i.vUv - _Point.xy;
 	p.x *= _AspectRatio;
 	float3 splat = exp(-dot(p, p) / _Radius) * _Color.xyz;
-	float3 base = tex2D(_MainTex, i.vUv).xyz;
+	float3 base = tex2D(_UTexture, i.vUv).xyz;
 	return float4(base + splat, 1.0);
 }
 
 float4 advectionShader(v2fbase i) : SV_Target {
-	float2 coord = i.vUv - _Dt * tex2D(_UVelocity, i.vUv).xy * _MainTex_TexelSize.xy;
+	float2 coord = i.vUv - _Dt * tex2D(_UVelocity, i.vUv).xy * _TexelSize.xy;
 	float4 result = tex2D(_USource, coord);
     float decay = 1.0 + _Dissipation * _Dt;
 	return result / decay;
@@ -132,12 +135,12 @@ float4 vorticityShader(v2fbase i) : SV_Target {
 
 	float2 force = 0.5 * float2(abs(T) - abs(B), abs(R) - abs(L));
 	force /= length(force) + 0.0001;
-	force *= 0.1 * C;
+	force *= _Curl * C;
 	force.y *= -1.0;
 
 	float2 velocity = tex2D(_UVelocity, i.vUv).xy;
 	velocity += force * _Dt;
-	velocity = min(max(velocity, -1000.0), 1000.0);
+	velocity = clamp(velocity, -1000.0, 1000.0);
 	return float4(velocity, 0.0, 1.0);
 }
 
@@ -163,18 +166,130 @@ float4 gradientSubtractShader(v2fbase i) : SV_Target {
 }
 ENDCG
 
+		// 0
         Pass {
-CGPROGRAM
-#pragma vertex baseVertexShader
-#pragma fragment frag
-
-#include "UnityCG.cginc"
-
-float4 frag (v2fbase i) : SV_Target {
-    float4 col = tex2D(_MainTex, i.vUv);
-    return col;
-}
-ENDCG
+			CGPROGRAM
+			#pragma vertex blurVertexShader
+			#pragma fragment blurShader
+			ENDCG
+        }
+		// 1
+        Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment copyShader
+			ENDCG
+        }
+		// 2
+        Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment clearShader
+			ENDCG
+        }
+		// 3
+        Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment colorShader
+			ENDCG
+        }
+		// 4
+        Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment copyShader
+			//#pragma fragment checkerboardShader
+			ENDCG
+        }
+		// 5
+		Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment copyShader
+			//#pragma fragment bloomPrefilterShader
+			ENDCG
+        }
+		// 6
+		Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment copyShader
+			//#pragma fragment bloomBlurShader
+			ENDCG
+        }
+		// 7
+		Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment copyShader
+			//#pragma fragment bloomFinalShader
+			ENDCG
+        }
+		// 8
+		Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment copyShader
+			//#pragma fragment sunraysMaskShader
+			ENDCG
+        }
+		// 9
+		Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment copyShader
+			//#pragma fragment sunraysShader
+			ENDCG
+        }
+		// 10
+		Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment splatShader
+			ENDCG
+        }
+		// 11
+		Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment advectionShader
+			ENDCG
+        }
+		// 12
+		Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment divergenceShader
+			ENDCG
+        }
+		// 13
+		Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment curlShader
+			ENDCG
+        }
+		// 14
+		Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment vorticityShader
+			ENDCG
+        }
+		// 15
+		Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment pressureShader
+			ENDCG
+        }
+		// 16
+		Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment gradientSubtractShader
+			ENDCG
         }
     }
 }
