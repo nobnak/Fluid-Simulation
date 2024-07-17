@@ -32,6 +32,7 @@ struct v2fblur {
 sampler2D _UTexture;
 sampler2D _UVelocity;
 sampler2D _USource;
+sampler2D _UTarget;
 sampler2D _UCurl;
 sampler2D _UPressure;
 sampler2D _UDivergence;
@@ -80,7 +81,7 @@ float4 checkerboardShader(v2fbase i) : SV_Target {
 	return float4(v, v, v, 1.0);
 }
 
-float4 displayShaderSource(v2fbase i) : SV_Target {
+float4 displayShader(v2fbase i) : SV_Target {
 	float3 c = tex2D(_UTexture, i.vUv).rgb;
     float a = max(c.r, max(c.g, c.b));
     return float4(c, a);
@@ -90,7 +91,7 @@ float4 splatShader(v2fbase i) : SV_Target {
 	float2 p = i.vUv - _Point.xy;
 	p.x *= _AspectRatio;
 	float3 splat = exp(-dot(p, p) / _Radius) * _Color.xyz;
-	float3 base = tex2D(_UTexture, i.vUv).xyz;
+	float3 base = tex2D(_UTarget, i.vUv).xyz;
 	return float4(base + splat, 1.0);
 }
 
@@ -169,8 +170,10 @@ ENDCG
 		// 0
         Pass {
 			CGPROGRAM
-			#pragma vertex blurVertexShader
-			#pragma fragment blurShader
+			#pragma vertex baseVertexShader
+			#pragma fragment copyShader
+			//#pragma vertex blurVertexShader
+			//#pragma fragment blurShader
 			ENDCG
         }
 		// 1
@@ -289,6 +292,13 @@ ENDCG
 			CGPROGRAM
 			#pragma vertex baseVertexShader
 			#pragma fragment gradientSubtractShader
+			ENDCG
+        }
+		// 17
+		Pass {
+			CGPROGRAM
+			#pragma vertex baseVertexShader
+			#pragma fragment displayShader
 			ENDCG
         }
     }

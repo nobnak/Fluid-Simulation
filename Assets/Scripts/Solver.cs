@@ -13,6 +13,7 @@ public class Solver : System.IDisposable {
     protected RenderTexture curl;
     protected DoubleBuffer pressure;
 
+    protected bool needResizeCanvas;
     protected float lastUpdateTime;
     protected float colorUpdateTimer;
 
@@ -25,17 +26,26 @@ public class Solver : System.IDisposable {
         solver = new Material(Resources.Load<Shader>(SHADER_PATH));
     }
 
-    public int2 GetResolution(int2 screen, int res) {
+    public Config CurrConfig {
+        get => config;
+        set {
+            this.config = value;
+            needResizeCanvas = true;
+        }
+    }
+    public RenderTexture CurrTarget { get; set; }
+
+    public int2 CalcResolution(int2 screen, int baseRes) {
         var aspect = screen.x / (float)screen.y;
         if (screen.x < screen.y)
-            return new int2(res, (int)math.round(res / aspect));
+            return new int2(baseRes, (int)math.round(baseRes / aspect));
         else
-            return new int2((int)math.round(res * aspect), res);
+            return new int2((int)math.round(baseRes * aspect), baseRes);
     }
     public void InitFramebuffers() {
-        var screenSize = new int2(Screen.width, Screen.height);
-        var simRes = GetResolution(screenSize, config.SIM_RESOLUTION);
-        var dyeRes = GetResolution(screenSize, config.DYE_RESOLUTION);
+        var screenSize = GetScreenSize();
+        var simRes = CalcResolution(screenSize, config.SIM_RESOLUTION);
+        var dyeRes = CalcResolution(screenSize, config.DYE_RESOLUTION);
 
         var rgba = RenderTextureFormat.ARGBHalf;
         var rg = RenderTextureFormat.RGHalf;
@@ -68,23 +78,16 @@ public class Solver : System.IDisposable {
         else
             pressure.Resize(simRes);
     }
-
     public void Update() {
         var dt = CalcDeltaTime();
+        if (needResizeCanvas) {
+            needResizeCanvas = false;
+            InitFramebuffers();
+        }
         UpdateColors(dt);
+        ApplyInputs();
         Step(dt);
-
-        //function update() {
-        //    const dt = calcDeltaTime();
-        //    if (resizeCanvas())
-        //        initFramebuffers();
-        //    updateColors(dt);
-        //    applyInputs();
-        //    if (!config.PAUSED)
-        //        step(dt);
-        //    render(null);
-        //    requestAnimationFrame(update);
-        //}
+        Render(CurrTarget);
     }
     public float CalcDeltaTime() {
         var tnow = Time.time;
@@ -179,77 +182,41 @@ public class Solver : System.IDisposable {
         dye.Swap();
     }
 
-    public void Render() {
-        //function render(target) {
-        //    if (config.BLOOM)
-        //        applyBloom(dye.read, bloom);
-        //    if (config.SUNRAYS) {
-        //        applySunrays(dye.read, dye.write, sunrays);
-        //        blur(sunrays, sunraysTemp, 1);
-        //    }
-
-        //    if (target == null || !config.TRANSPARENT) {
-        //        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-        //        gl.enable(gl.BLEND);
-        //    } else {
-        //        gl.disable(gl.BLEND);
-        //    }
-
-        //    if (!config.TRANSPARENT)
-        //        drawColor(target, normalizeColor(config.BACK_COLOR));
-        //    if (target == null && config.TRANSPARENT)
-        //        drawCheckerboard(target);
-        //    drawDisplay(target);
-        //}
+    public void Render(RenderTexture dst) {
+        DrawDisplay(dst);
     }
 
     public void DrawDisplay(RenderTexture dst) {
-
-
-        //function drawDisplay(target) {
-        //    let width = target == null ? gl.drawingBufferWidth : target.width;
-        //    let height = target == null ? gl.drawingBufferHeight : target.height;
-
-        //    displayMaterial.bind();
-        //    if (config.SHADING)
-        //        gl.uniform2f(displayMaterial.uniforms.texelSize, 1.0 / width, 1.0 / height);
-        //    gl.uniform1i(displayMaterial.uniforms.uTexture, dye.read.attach(0));
-        //    if (config.BLOOM) {
-        //        gl.uniform1i(displayMaterial.uniforms.uBloom, bloom.attach(1));
-        //        gl.uniform1i(displayMaterial.uniforms.uDithering, ditheringTexture.attach(2));
-        //        let scale = getTextureScale(ditheringTexture, width, height);
-        //        gl.uniform2f(displayMaterial.uniforms.ditherScale, scale.x, scale.y);
-        //    }
-        //    if (config.SUNRAYS)
-        //        gl.uniform1i(displayMaterial.uniforms.uSunrays, sunrays.attach(3));
-        //    blit(target);
-        //}
+        solver.SetPass((int)ShaderPass.Display);
+        solver.SetTexture(P_UTexture, dye.Read);
+        Graphics.Blit(null, dst, solver);
     }
 
-    public void Splat() {
+    public void Splat(float2 point, float2 delta, Color color) {
+        var screenSize = GetScreenSize();
+        solver.SetPass((int)ShaderPass.Splat);
+        solver.SetTexture(P_UTarget, velocity.Read);
+        solver.SetFloat(P_AspectRatio, screenSize.x / (float)screenSize.y);
+        solver.SetFloatArray(P_Point, new float[] { point.x, point.y });
+        solver.SetVector(P_Color, new Color(delta.x, delta.y, 0, 0));
+        solver.SetFloat(P_Radius, CorrectAspect(config.SPLAT_RADIUS / 100f));
+        Graphics.Blit(null, velocity.Write, solver);
+        velocity.Swap();
 
-
-        //function splat(x, y, dx, dy, color) {
-        //    splatProgram.bind();
-        //    gl.uniform1i(splatProgram.uniforms.uTarget, velocity.read.attach(0));
-        //    gl.uniform1f(splatProgram.uniforms.aspectRatio, canvas.width / canvas.height);
-        //    gl.uniform2f(splatProgram.uniforms.point, x, y);
-        //    gl.uniform3f(splatProgram.uniforms.color, dx, dy, 0.0);
-        //    gl.uniform1f(splatProgram.uniforms.radius, correctRadius(config.SPLAT_RADIUS / 100.0));
-        //    blit(velocity.write);
-        //    velocity.swap();
-
-        //    gl.uniform1i(splatProgram.uniforms.uTarget, dye.read.attach(0));
-        //    gl.uniform3f(splatProgram.uniforms.color, color.r, color.g, color.b);
-        //    blit(dye.write);
-        //    dye.swap();
-        //}
+        solver.SetTexture(P_UTarget, dye.Read);
+        solver.SetVector(P_Color, color);
+        Graphics.Blit(null, dye.Write, solver);
+        dye.Swap();
     }
     public float CorrectAspect(float radius) {
-        var aspectRatio = Screen.width / (float)Screen.height;
+        var screenSize = GetScreenSize();
+        var aspectRatio = screenSize.x / (float)screenSize.y;
         if (aspectRatio > 1)
             radius *= aspectRatio;
         return radius;
+    }
+    public static int2 GetScreenSize() {
+        return new int2(Screen.width, Screen.height);
     }
 
     #region IDisposable
@@ -345,12 +312,14 @@ public class Solver : System.IDisposable {
         Curl = 13,
         Vorticity = 14,
         Pressure = 15,
-        GradientSubtract = 16
+        GradientSubtract = 16,
+        Display = 17
     }
 
     public static readonly int P_UTexture = Shader.PropertyToID("_UTexture");
     public static readonly int P_UVelocity = Shader.PropertyToID("_UVelocity");
     public static readonly int P_USource = Shader.PropertyToID("_USource");
+    public static readonly int P_UTarget = Shader.PropertyToID("_UTarget");
     public static readonly int P_UCurl = Shader.PropertyToID("_UCurl");
     public static readonly int P_UPressure = Shader.PropertyToID("_UPressure");
     public static readonly int P_UDivergence = Shader.PropertyToID("_UDivergence");
