@@ -1,5 +1,6 @@
 using Unity.Mathematics;
 using UnityEngine;
+using Random = Unity.Mathematics.Random;
 
 public class Solver : System.IDisposable {
 
@@ -13,15 +14,18 @@ public class Solver : System.IDisposable {
     protected RenderTexture curl;
     protected DoubleBuffer pressure;
 
+    protected Random rand;
+
     protected bool needResizeCanvas;
     protected float lastUpdateTime;
     protected float colorUpdateTimer;
 
-    public Solver(Config config) {
+    public Solver(Config config, uint seed = 31) {
         this.config = config;
         InitFramebuffers();
         lastUpdateTime = Time.time;
         colorUpdateTimer = 0f;
+        rand = new Random(seed);
 
         solver = new Material(Resources.Load<Shader>(SHADER_PATH));
     }
@@ -199,21 +203,59 @@ public class Solver : System.IDisposable {
         solver.SetFloat(P_AspectRatio, screenSize.x / (float)screenSize.y);
         solver.SetFloatArray(P_Point, new float[] { point.x, point.y });
         solver.SetVector(P_Color, new Color(delta.x, delta.y, 0, 0));
-        solver.SetFloat(P_Radius, CorrectAspect(config.SPLAT_RADIUS / 100f));
+        solver.SetFloat(P_Radius, CorrectRadius(config.SPLAT_RADIUS / 100f));
         Graphics.Blit(null, velocity.Write, solver);
         velocity.Swap();
 
         solver.SetTexture(P_UTarget, dye.Read);
-        solver.SetVector(P_Color, color);
+        solver.SetColor(P_Color, color);
         Graphics.Blit(null, dye.Write, solver);
         dye.Swap();
     }
-    public float CorrectAspect(float radius) {
+    public void MultipleSplats(int amount) {
+        for (var i = 0; i < amount; i++) {
+            var c = GenerateColor();
+            c.r *= 10f;
+            c.g *= 10f;
+            c.b *= 10f;
+            var xy = rand.NextFloat2();
+            var dxy = 1000 * (rand.NextFloat2() - 0.5f);
+            Splat(xy, dxy, c);
+        }
+    }
+    public float CorrectRadius(float radius) {
         var screenSize = GetScreenSize();
         var aspectRatio = screenSize.x / (float)screenSize.y;
         if (aspectRatio > 1)
             radius *= aspectRatio;
         return radius;
+    }
+    public Color GenerateColor() {
+        var c = HSVToRGB(new float3(rand.NextFloat(), 1, 1));
+        c.r *= 0.15f;
+        c.g *= 0.15f;
+        c.b *= 0.15f;
+        return c;
+    }
+
+    public static Color HSVToRGB(float3 hsv) {
+        var h = hsv.x;
+        var s = hsv.y;
+        var v = hsv.z;
+        var i = math.floor(h * 6);
+        var f = h * 6 - i;
+        var p = v * (1 - s);
+        var q = v * (1 - f * s);
+        var t = v * (1 - (1 - f)) * s;
+
+        switch (i % 6) {
+            case 0: return new Color(v, t, p);
+            case 1: return new Color(q, v, p);
+            case 2: return new Color(p, v, t);
+            case 3: return new Color(p, q, v);
+            case 4: return new Color(t, p, v);
+            default: return new Color(v, p, q);
+        }
     }
     public static int2 GetScreenSize() {
         return new int2(Screen.width, Screen.height);
