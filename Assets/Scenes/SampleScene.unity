@@ -274,6 +274,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   presets:
     mat: {fileID: 2100000, guid: a64fc79aeb403ed4aafb460be50eb1e2, type: 2}
+    debug: 2
   config:
     SIM_RESOLUTION: 128
     DYE_RESOLUTION: 1024

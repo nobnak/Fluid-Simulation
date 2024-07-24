@@ -20,14 +20,6 @@ struct v2fbase {
     float2 vT : TEXCOORD3;
     float2 vB : TEXCOORD4;
 };
-struct v2fblur {
-    float4 vertex : SV_POSITION;
-    float2 vUv : TEXCOORD0;
-    float2 vL : TEXCOORD1;
-    float2 vR : TEXCOORD2;
-    float2 vT : TEXCOORD3;
-    float2 vB : TEXCOORD4;
-};
 
 sampler2D _UTexture;
 sampler2D _UVelocity;
@@ -43,7 +35,7 @@ float4 _Color;
 
 float _ClearValue;
 float _AspectRatio;
-float2 _Point;
+float4 _Point;
 
 float _Radius;
 float _Dt;

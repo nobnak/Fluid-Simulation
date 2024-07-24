@@ -8,11 +8,11 @@ public class Solver : System.IDisposable {
 
     protected Material solver;
 
-    protected DoubleBuffer dye;
-    protected DoubleBuffer velocity;
-    protected RenderTexture divergence;
-    protected RenderTexture curl;
-    protected DoubleBuffer pressure;
+    public DoubleBuffer dye { get; protected set; }
+    public DoubleBuffer velocity { get; protected set; }
+    public RenderTexture divergence { get; protected set; }
+    public RenderTexture curl { get; protected set; }
+    public DoubleBuffer pressure { get; protected set; }
 
     protected Random rand;
 
@@ -22,12 +22,14 @@ public class Solver : System.IDisposable {
 
     public Solver(Config config, uint seed = 31) {
         this.config = config;
-        InitFramebuffers();
         lastUpdateTime = Time.time;
         colorUpdateTimer = 0f;
         rand = new Random(seed);
 
         solver = new Material(Resources.Load<Shader>(SHADER_PATH));
+
+        InitFramebuffers();
+        //MultipleSplats((int)rand.NextFloat(0f, 20f) + 5);
     }
 
     public Config CurrConfig {
@@ -56,6 +58,8 @@ public class Solver : System.IDisposable {
         var r = RenderTextureFormat.RHalf;
         var filtering = FilterMode.Bilinear;
         var wrap = TextureWrapMode.Clamp;
+
+        Debug.Log($"{nameof(InitFramebuffers)}: screen={screenSize} sim={simRes} dye={dyeRes}");
 
         if (dye == null)
             dye = new DoubleBuffer(dyeRes, rgba, filtering, wrap);
@@ -129,60 +133,53 @@ public class Solver : System.IDisposable {
         var velocityTexelSize = velocity.TexelSize;
         var dyeTexelSize = dye.TexelSize;
 
-        solver.SetPass((int)ShaderPass.Curl);
         solver.SetVector(P_TexelSize, velocityTexelSize);
         solver.SetTexture(P_UVelocity, velocity.Read);
-        Graphics.Blit(null, curl, solver);
+        Graphics.Blit(null, curl, solver, (int)ShaderPass.Curl);
 
-        solver.SetPass((int)ShaderPass.Vorticity);
         solver.SetVector(P_TexelSize, velocityTexelSize);
         solver.SetTexture(P_UVelocity, velocity.Read);
         solver.SetTexture(P_UCurl, curl);
         solver.SetFloat(P_Curl, config.CURL);
         solver.SetFloat(P_Dt, dt);
-        Graphics.Blit(null, velocity.Write, solver);
+        Graphics.Blit(null, velocity.Write, solver, (int)ShaderPass.Vorticity);
         velocity.Swap();
 
-        solver.SetPass((int)ShaderPass.Divergence);
         solver.SetVector(P_TexelSize, velocityTexelSize);
         solver.SetTexture(P_UVelocity, velocity.Read);
-        Graphics.Blit(null, divergence, solver);
+        Graphics.Blit(null, divergence, solver, (int)ShaderPass.Divergence);
 
-        solver.SetPass((int)ShaderPass.Clear);
         solver.SetTexture(P_UTexture, pressure.Read);
         solver.SetFloat(P_ClearValue, config.PRESSURE);
-        Graphics.Blit(null, pressure.Write, solver);
+        Graphics.Blit(null, pressure.Write, solver, (int)ShaderPass.Clear);
         pressure.Swap();
 
-        solver.SetPass((int)ShaderPass.Pressure);
         solver.SetVector(P_TexelSize, velocityTexelSize);
         solver.SetTexture(P_UDivergence, divergence);
         for (var i = 0; i < config.PRESSURE_ITERATIONS; i++) {
             solver.SetTexture(P_UPressure, pressure.Read);
-            Graphics.Blit(null, pressure.Write, solver);
+            Graphics.Blit(null, pressure.Write, solver, (int)ShaderPass.Pressure);
             pressure.Swap();
         }
 
-        solver.SetPass((int)ShaderPass.GradientSubtract);
         solver.SetVector(P_TexelSize, velocityTexelSize);
         solver.SetTexture(P_UPressure, pressure.Read);
         solver.SetTexture(P_UVelocity, velocity.Read);
-        Graphics.Blit(null, velocity.Write, solver);
+        Graphics.Blit(null, velocity.Write, solver, (int)ShaderPass.GradientSubtract);
         velocity.Swap();
 
-        solver.SetPass((int)ShaderPass.Advection);
         solver.SetVector(P_TexelSize, velocityTexelSize);
         solver.SetTexture(P_UVelocity, velocity.Read);
         solver.SetTexture(P_USource, velocity.Read);
         solver.SetFloat(P_Dt, dt);
         solver.SetFloat(P_Dissipation, config.VELOCITY_DISSIPATION);
-        Graphics.Blit(null, velocity.Write, solver);
+        Graphics.Blit(null, velocity.Write, solver, (int)ShaderPass.Advection);
         velocity.Swap();
 
         solver.SetTexture(P_UVelocity, velocity.Read);
         solver.SetTexture(P_USource, dye.Read);
         solver.SetFloat(P_Dissipation, config.DENSITY_DISSIPATION);
-        Graphics.Blit(null, dye.Write, solver);
+        Graphics.Blit(null, dye.Write, solver, (int)ShaderPass.Advection);
         dye.Swap();
     }
 
@@ -191,25 +188,24 @@ public class Solver : System.IDisposable {
     }
 
     public void DrawDisplay(RenderTexture dst) {
-        solver.SetPass((int)ShaderPass.Display);
         solver.SetTexture(P_UTexture, dye.Read);
-        Graphics.Blit(null, dst, solver);
+        Graphics.Blit(null, dst, solver, (int)ShaderPass.Display);
     }
 
     public void Splat(float2 point, float2 delta, Color color) {
+        Debug.Log($"{nameof(Splat)}: point={point} delta={delta} color={color}");
         var screenSize = GetScreenSize();
-        solver.SetPass((int)ShaderPass.Splat);
         solver.SetTexture(P_UTarget, velocity.Read);
         solver.SetFloat(P_AspectRatio, screenSize.x / (float)screenSize.y);
-        solver.SetFloatArray(P_Point, new float[] { point.x, point.y });
+        solver.SetVector(P_Point, new float4(point.x, point.y, 0, 0));
         solver.SetVector(P_Color, new Color(delta.x, delta.y, 0, 0));
         solver.SetFloat(P_Radius, CorrectRadius(config.SPLAT_RADIUS / 100f));
-        Graphics.Blit(null, velocity.Write, solver);
+        Graphics.Blit(null, velocity.Write, solver, (int)ShaderPass.Splat);
         velocity.Swap();
 
         solver.SetTexture(P_UTarget, dye.Read);
         solver.SetColor(P_Color, color);
-        Graphics.Blit(null, dye.Write, solver);
+        Graphics.Blit(null, dye.Write, solver, (int)ShaderPass.Splat);
         dye.Swap();
     }
     public void MultipleSplats(int amount) {
@@ -296,8 +292,8 @@ public class Solver : System.IDisposable {
         protected RenderTexture tex0, tex1;
         public DoubleBuffer(int2 size, RenderTextureFormat format, FilterMode filter, TextureWrapMode wrap) {
             TexelSize = CalcTexelSize(size);
-            tex0 = size.CreateRenderTexture(RenderTextureFormat.ARGBHalf, filter, wrap);
-            tex1 = size.CreateRenderTexture(RenderTextureFormat.ARGBHalf, filter, wrap);
+            tex0 = size.CreateRenderTexture(format, filter, wrap);
+            tex1 = size.CreateRenderTexture(format, filter, wrap);
         }
 
         public RenderTexture Read { get => tex0; }
