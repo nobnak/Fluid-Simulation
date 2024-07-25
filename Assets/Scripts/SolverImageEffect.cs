@@ -2,6 +2,7 @@ using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using Random = Unity.Mathematics.Random;
 
 public class SolverImageEffect : MonoBehaviour {
@@ -37,7 +38,9 @@ public class SolverImageEffect : MonoBehaviour {
             var screenSize = new int2(camAttached.pixelWidth, camAttached.pixelHeight);
             if (target == null || screenSize.x != target.width || screenSize.y != target.height) {
                 DisposeAllTextures();
-                target = new RenderTexture(screenSize.x, screenSize.y, 0, DefaultFormat.LDR);
+
+                var format = DefaultFormat.HDR;
+                target = new RenderTexture(screenSize.x, screenSize.y, 0, format);
                 target.hideFlags = HideFlags.DontSave;
                 debugOutTex = new RenderTexture(target.descriptor);
                 debugOutTex.hideFlags = HideFlags.DontSave;

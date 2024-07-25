@@ -192,7 +192,9 @@ public class Solver : System.IDisposable {
     }
 
     public void Splat(float2 point, float2 delta, Color color) {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.Log($"{nameof(Splat)}: point={point} delta={delta} color={color}");
+#endif
         var screenSize = GetScreenSize();
         solver.SetTexture(P_UTarget, velocity.Read);
         solver.SetFloat(P_AspectRatio, screenSize.x / (float)screenSize.y);
