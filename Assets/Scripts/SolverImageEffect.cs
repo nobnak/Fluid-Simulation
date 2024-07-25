@@ -2,6 +2,7 @@ using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
+using Random = Unity.Mathematics.Random;
 
 public class SolverImageEffect : MonoBehaviour {
 
@@ -12,14 +13,16 @@ public class SolverImageEffect : MonoBehaviour {
     protected Camera camAttached;
     protected RenderTexture target;
     protected RenderTexture debugOutTex;
+    protected Random rand;
 
     #region unity
     protected void OnEnable() {
         solver = new(config);
+        rand = new Random((uint)GetInstanceID());
 
         camAttached = GetComponent<Camera>();
 
-        solver.MultipleSplats(10);
+        solver.MultipleSplats((int)rand.NextFloat(0f, 20f) + 5);
     }
     protected void OnDisable() {
         if (solver != null) {
@@ -42,7 +45,7 @@ public class SolverImageEffect : MonoBehaviour {
         }
         if (solver != null) {
             solver.CurrTarget = target;
-            //solver.Update();
+            solver.Update();
             switch (presets.debug) {
                 case DebugOutTex.Dye: {
                     Graphics.Blit(solver.dye.Read, debugOutTex);

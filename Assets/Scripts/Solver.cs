@@ -29,7 +29,6 @@ public class Solver : System.IDisposable {
         solver = new Material(Resources.Load<Shader>(SHADER_PATH));
 
         InitFramebuffers();
-        //MultipleSplats((int)rand.NextFloat(0f, 20f) + 5);
     }
 
     public Config CurrConfig {
@@ -50,8 +49,8 @@ public class Solver : System.IDisposable {
     }
     public void InitFramebuffers() {
         var screenSize = GetScreenSize();
-        var simRes = CalcResolution(screenSize, config.SIM_RESOLUTION);
-        var dyeRes = CalcResolution(screenSize, config.DYE_RESOLUTION);
+        var simRes = CalcResolution(screenSize, (int)config.SIM_RESOLUTION);
+        var dyeRes = CalcResolution(screenSize, (int)config.DYE_RESOLUTION);
 
         var rgba = RenderTextureFormat.ARGBHalf;
         var rg = RenderTextureFormat.RGHalf;
@@ -375,10 +374,19 @@ public class Solver : System.IDisposable {
     public static readonly int P_Dissipation = Shader.PropertyToID("_Dissipation");
     public static readonly int P_Curl = Shader.PropertyToID("_Curl");
 
+    public enum DyeResolution {
+        High = 1024, Medium = 512, Low = 256, VeryLow = 128
+    }
+    public enum SimResolution {
+        R32 = 32, R64 = 64, R128 = 128, R256 = 256
+    }
+    public enum PressureIterations {
+        Low = 10, Medium = 20, High = 30, VeryHigh = 40
+    }
     [System.Serializable]
     public class Config {
-        public int SIM_RESOLUTION = 128;
-        public int DYE_RESOLUTION = 1024;
+        public SimResolution SIM_RESOLUTION = (SimResolution)128;
+        public DyeResolution DYE_RESOLUTION = (DyeResolution)1024;
         public int CAPTURE_RESOLUTION = 512;
         [Range(0f, 4.0f)]
         public float DENSITY_DISSIPATION = 1;
