@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using Unity.Mathematics;
+using UnityEditor;
 using UnityEngine;
 
 public class SolverQuad : SolverMonoBase<SolverQuad.Presets> {
@@ -13,6 +14,10 @@ public class SolverQuad : SolverMonoBase<SolverQuad.Presets> {
     public override Solver.Config CurrSolverConfig => config.solverConfig;
 
     #region unity
+    protected override void OnEnable() {
+        base.OnEnable();
+        solver.MultipleSplats((int)rand.NextFloat(0f, 20f) + 5);
+    }
     protected override void Update() {
         var cam = presets.view ?? Camera.main;
         if (cam != null) {
@@ -44,7 +49,7 @@ public class SolverQuad : SolverMonoBase<SolverQuad.Presets> {
     public static readonly int P_MainTex = Shader.PropertyToID("_MainTex");
 
     [System.Serializable]
-    public class Presets : SolverMonoBase<Presets>.Presets {
+    public new class Presets : SolverMonoBase<Presets>.Presets {
         public Camera view;
     }
     [System.Serializable]
@@ -53,4 +58,23 @@ public class SolverQuad : SolverMonoBase<SolverQuad.Presets> {
         public float z = 10f;
     }
     #endregion
+
+    #region editor
+#if UNITY_EDITOR
+    [UnityEditor.CustomEditor(typeof(SolverQuad))]
+    public class Editor : UnityEditor.Editor {
+        public override void OnInspectorGUI() {
+            base.OnInspectorGUI();
+            var mono = target as SolverQuad;
+            var enabled = mono != null && mono.isActiveAndEnabled && Application.isPlaying;
+
+            GUI.enabled = enabled;
+            using (new EditorGUILayout.HorizontalScope()) {
+                if (GUILayout.Button("Random splats"))
+                    mono.solver.MultipleSplats((int)mono.rand.NextFloat(0f, 20f) + 5);
+            }
+        }
+    }
+#endif
+#endregion
 }

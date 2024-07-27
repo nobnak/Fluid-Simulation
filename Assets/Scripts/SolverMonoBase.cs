@@ -1,4 +1,5 @@
 using Unity.Mathematics;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -21,8 +22,6 @@ public abstract class SolverMonoBase<T> : MonoBehaviour
     protected virtual void OnEnable() {
         solver = new(CurrSolverConfig);
         rand = new Random((uint)GetInstanceID());
-
-        solver.MultipleSplats((int)rand.NextFloat(0f, 20f) + 5);
     }
     protected virtual void OnDisable() {
         if (solver != null) {

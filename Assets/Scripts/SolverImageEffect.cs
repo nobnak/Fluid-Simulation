@@ -46,7 +46,7 @@ public class SolverImageEffect : SolverMonoBase<SolverImageEffect.Presets> {
     public static readonly int P_SourceTex = Shader.PropertyToID("_SourceTex");
 
     [System.Serializable]
-    public class Presets : SolverMonoBase<Presets>.Presets {
+    public new class Presets : SolverMonoBase<Presets>.Presets {
         public Camera view;
     }
     #endregion
