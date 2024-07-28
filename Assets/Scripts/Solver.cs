@@ -17,13 +17,9 @@ public class Solver : System.IDisposable {
     protected Random rand;
 
     protected bool needResizeCanvas;
-    protected float lastUpdateTime;
-    protected float colorUpdateTimer;
 
     public Solver(Config config, uint seed = 31) {
         this.config = config;
-        lastUpdateTime = Time.time;
-        colorUpdateTimer = 0f;
         rand = new Random(seed);
 
         solver = new Material(Resources.Load<Shader>(SHADER_PATH));
@@ -85,48 +81,13 @@ public class Solver : System.IDisposable {
         else
             pressure.Resize(simRes);
     }
-    public void Update() {
-        var dt = CalcDeltaTime();
+    public void Update(float dt) {
         if (needResizeCanvas) {
             needResizeCanvas = false;
             InitFramebuffers();
         }
-        UpdateColors(dt);
-        ApplyInputs();
         Step(dt);
         Render(CurrTarget);
-    }
-    public float CalcDeltaTime() {
-        var tnow = Time.time;
-        var dt = tnow - lastUpdateTime;
-        lastUpdateTime = tnow;
-        return dt;
-    }
-    public void UpdateColors(float dt) {
-        //function updateColors(dt) {
-        //    if (!config.COLORFUL) return;
-
-        //    colorUpdateTimer += dt * config.COLOR_UPDATE_SPEED;
-        //    if (colorUpdateTimer >= 1) {
-        //        colorUpdateTimer = wrap(colorUpdateTimer, 0, 1);
-        //        pointers.forEach(p => {
-        //            p.color = generateColor();
-        //        });
-        //    }
-        //}
-    }
-    public void ApplyInputs() {
-        //function applyInputs() {
-        //    if (splatStack.length > 0)
-        //        multipleSplats(splatStack.pop());
-
-        //    pointers.forEach(p => {
-        //        if (p.moved) {
-        //            p.moved = false;
-        //            splatPointer(p);
-        //        }
-        //    });
-        //}
     }
     public void Step(float dt) {
         var velocityTexelSize = velocity.TexelSize;
@@ -211,7 +172,7 @@ public class Solver : System.IDisposable {
     }
     public void MultipleSplats(int amount) {
         for (var i = 0; i < amount; i++) {
-            var c = GenerateColor();
+            var c = GenerateColor(rand);
             c.r *= 10f;
             c.g *= 10f;
             c.b *= 10f;
@@ -227,7 +188,7 @@ public class Solver : System.IDisposable {
             radius *= aspectRatio;
         return radius;
     }
-    public Color GenerateColor() {
+    public static Color GenerateColor(Random rand) {
         var c = HSVToRGB(new float3(rand.NextFloat(), 1, 1));
         c.r *= 0.15f;
         c.g *= 0.15f;

@@ -13,6 +13,7 @@ public abstract class SolverMonoBase<T> : MonoBehaviour
     protected RenderTexture target;
     protected RenderTexture debugOutTex;
     protected Random rand;
+    protected float lastUpdateTime;
 
     public abstract int TextureId { get; }
     public abstract T CurrPresets { get; }
@@ -22,6 +23,7 @@ public abstract class SolverMonoBase<T> : MonoBehaviour
     protected virtual void OnEnable() {
         solver = new(CurrSolverConfig);
         rand = new Random((uint)GetInstanceID());
+        lastUpdateTime = Time.time;
     }
     protected virtual void OnDisable() {
         if (solver != null) {
@@ -33,6 +35,7 @@ public abstract class SolverMonoBase<T> : MonoBehaviour
 
     protected virtual void Update() {
         var presets = CurrPresets;
+        var dt = CalcDeltaTime();
 
         if (TryGetScreenSize(out int2 screenSize)) {
             if (target == null || screenSize.x != target.width || screenSize.y != target.height) {
@@ -51,7 +54,7 @@ public abstract class SolverMonoBase<T> : MonoBehaviour
         }
         if (solver != null) {
             solver.CurrTarget = target;
-            solver.Update();
+            solver.Update(dt);
             switch (presets.debug) {
                 case DebugOutTex.Dye: {
                     Graphics.Blit(solver.dye.Read, debugOutTex);
@@ -71,6 +74,12 @@ public abstract class SolverMonoBase<T> : MonoBehaviour
     #endregion
 
     #region methods
+    protected float CalcDeltaTime() {
+        var tnow = Time.time;
+        var dt = tnow - lastUpdateTime;
+        lastUpdateTime = tnow;
+        return dt;
+    }
     protected virtual void DisposeAllTextures() {
         if (target != null) {
             Object.Destroy(target);
