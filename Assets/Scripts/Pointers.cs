@@ -1,6 +1,9 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Mathematics;
+using UnityEditor.PackageManager.UI;
 using UnityEngine;
 using Random = Unity.Mathematics.Random;
 
@@ -17,6 +20,39 @@ public class Pointers {
         Solver = solver;
         colorUpdateTimer = 0f;
         rand = new Random(seed);
+    }
+
+    public void Update(float dt) {
+        if (Input.GetMouseButtonDown(0)) {
+            var pos = Input.mousePosition;
+            var screenSize = Solver.GetScreenSize();
+            var texcoord = new float2(pos.x / screenSize.x, 1 - pos.y / screenSize.y);
+            var pointer = pointers.FirstOrDefault(pointers => pointers.id == -1);
+            if (pointer == null) {
+                pointer = new Pointer();
+                pointers.Add(pointer);
+            }
+            UpdatePointerDownData(pointer, -1, texcoord);
+        }
+        if (Input.GetMouseButtonUp(0)) {
+            var pointer = pointers.FirstOrDefault(pointers => pointers.id == -1);
+            if (pointer != null) {
+                UpdatePointerUpData(pointer);
+            }
+        }
+        if (Input.GetMouseButton(0)) {
+            var pointer = pointers.FirstOrDefault(pointers => pointers.id == -1);
+            if (pointer != null) {
+                if (!pointer.down) return;
+                var pos = Input.mousePosition;
+                var screenSize = Solver.GetScreenSize();
+                var texcoord = new float2(pos.x / screenSize.x, 1 - pos.y / screenSize.y);
+                UpdatePointerMoveData(pointer, texcoord);
+            }
+        }
+
+        ApplyInputs(); 
+        UpdateColors(dt);
     }
 
     public void SplatPointer(Pointer pointer) {
@@ -41,6 +77,25 @@ public class Pointers {
                 pointer.color = Solver.GenerateColor(rand);
             }
         }
+    }
+    public void UpdatePointerDownData(Pointer pointer, int id, float2 texcoord) {
+        pointer.id = id;
+        pointer.down = true;
+        pointer.moved = false;
+        pointer.texcoord = texcoord;
+        pointer.prevTexcoord = pointer.texcoord;
+        pointer.delta = float2.zero;
+        pointer.color = Solver.GenerateColor(rand);
+    }
+    public void UpdatePointerMoveData(Pointer pointer, float2 texcoord) {
+        pointer.prevTexcoord = pointer.texcoord;
+        pointer.texcoord = texcoord;
+        pointer.delta = pointer.texcoord - pointer.prevTexcoord;
+        pointer.moved = math.lengthsq(pointer.delta) > 0;
+    }
+    public void UpdatePointerUpData(Pointer pointer) {
+        pointer.id = -1;
+        pointer.down = false;
     }
 
     public class Pointer {
