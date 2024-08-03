@@ -275,6 +275,7 @@ MonoBehaviour:
   presets:
     mat: {fileID: 2100000, guid: a64fc79aeb403ed4aafb460be50eb1e2, type: 2}
     debug: 0
+    view: {fileID: 0}
   solverConfig:
     SIM_RESOLUTION: 128
     DYE_RESOLUTION: 1024
@@ -585,7 +586,7 @@ MonoBehaviour:
       SIM_RESOLUTION: 128
       DYE_RESOLUTION: 1024
       CAPTURE_RESOLUTION: 512
-      DENSITY_DISSIPATION: 1
+      DENSITY_DISSIPATION: 0.1
       VELOCITY_DISSIPATION: 0.2
       PRESSURE: 0.8
       PRESSURE_ITERATIONS: 20
