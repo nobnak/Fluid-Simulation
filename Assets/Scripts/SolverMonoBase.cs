@@ -22,6 +22,7 @@ public abstract class SolverMonoBase<T> : MonoBehaviour
     #region unity
     protected virtual void OnEnable() {
         solver = new(CurrSolverConfig);
+
         rand = new Random((uint)GetInstanceID());
         lastUpdateTime = Time.time;
     }
@@ -50,10 +51,13 @@ public abstract class SolverMonoBase<T> : MonoBehaviour
                 target.useMipMap = false;
                 debugOutTex = new RenderTexture(target.descriptor);
                 debugOutTex.hideFlags = HideFlags.DontSave;
+
+                if (solver != null)
+                    solver.CurrTarget = target;
             }
         }
+
         if (solver != null) {
-            solver.CurrTarget = target;
             solver.Update(dt);
             switch (presets.debug) {
                 case DebugOutTex.Dye: {
@@ -66,6 +70,7 @@ public abstract class SolverMonoBase<T> : MonoBehaviour
                 }
             }
         }
+
         if (presets.mat != null) {
             var mat = presets.mat;
             mat.SetTexture(TextureId, presets.debug == default ? target : debugOutTex);

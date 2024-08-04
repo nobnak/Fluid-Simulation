@@ -1,5 +1,6 @@
 using Unity.Mathematics;
 using UnityEngine;
+using static UnityEngine.Rendering.DebugUI;
 using Random = Unity.Mathematics.Random;
 
 public class Solver : System.IDisposable {
@@ -7,6 +8,12 @@ public class Solver : System.IDisposable {
     protected Config config;
 
     protected Material solver;
+    protected Random rand;
+
+    protected bool needResizeCanvas;
+    protected RenderTexture currTarget;
+    protected int2 currTargetSize;
+    protected float currTargetAspect;
 
     public DoubleBuffer dye { get; protected set; }
     public DoubleBuffer velocity { get; protected set; }
@@ -14,14 +21,11 @@ public class Solver : System.IDisposable {
     public RenderTexture curl { get; protected set; }
     public DoubleBuffer pressure { get; protected set; }
 
-    protected Random rand;
-
-    protected bool needResizeCanvas;
-
-    public Solver(Config config, uint seed = 31) {
+    public Solver(Config config, RenderTexture currTarget = null, uint seed = 31) {
         this.config = config;
-        rand = new Random(seed);
+        SetTarget(currTarget);
 
+        rand = new Random(seed);
         solver = new Material(Resources.Load<Shader>(SHADER_PATH));
 
         InitFramebuffers();
@@ -34,19 +38,32 @@ public class Solver : System.IDisposable {
             needResizeCanvas = true;
         }
     }
-    public RenderTexture CurrTarget { get; set; }
+    public RenderTexture CurrTarget {
+        get => currTarget;
+        set => SetTarget(value);
+    }
+    public Solver SetTarget(RenderTexture target) {
+        needResizeCanvas = true;
+        currTarget = target;
+        if (target != null) {
+            currTargetSize = new int2(target.width, target.height);
+            currTargetAspect = target.width / (float)target.height;
+        } else {
+            currTargetSize = int2.zero;
+            currTargetAspect = 1f;
+        }
+        return this;
+    }
 
-    public int2 CalcResolution(int2 screen, int baseRes) {
-        var aspect = screen.x / (float)screen.y;
-        if (screen.x < screen.y)
+    public int2 CalcResolution(float aspect, int baseRes) {
+        if (aspect < 1f)
             return new int2(baseRes, (int)math.round(baseRes / aspect));
         else
             return new int2((int)math.round(baseRes * aspect), baseRes);
     }
     public void InitFramebuffers() {
-        var screenSize = GetScreenSize();
-        var simRes = CalcResolution(screenSize, (int)config.SIM_RESOLUTION);
-        var dyeRes = CalcResolution(screenSize, (int)config.DYE_RESOLUTION);
+        var simRes = CalcResolution(currTargetAspect, (int)config.SIM_RESOLUTION);
+        var dyeRes = CalcResolution(currTargetAspect, (int)config.DYE_RESOLUTION);
 
         var rgba = RenderTextureFormat.ARGBHalf;
         var rg = RenderTextureFormat.RGHalf;
@@ -54,7 +71,7 @@ public class Solver : System.IDisposable {
         var filtering = FilterMode.Bilinear;
         var wrap = TextureWrapMode.Clamp;
 
-        Debug.Log($"{nameof(InitFramebuffers)}: screen={screenSize} sim={simRes} dye={dyeRes}");
+        Debug.Log($"{nameof(InitFramebuffers)}: screen={currTargetSize} sim={simRes} dye={dyeRes}");
 
         if (dye == null)
             dye = new DoubleBuffer(dyeRes, rgba, filtering, wrap);
@@ -156,9 +173,8 @@ public class Solver : System.IDisposable {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.Log($"{nameof(Splat)}: point={point} delta={delta} color={color}");
 #endif
-        var screenSize = GetScreenSize();
         solver.SetTexture(P_UTarget, velocity.Read);
-        solver.SetFloat(P_AspectRatio, screenSize.x / (float)screenSize.y);
+        solver.SetFloat(P_AspectRatio, currTargetAspect);
         solver.SetVector(P_Point, new float4(point.x, point.y, 0, 0));
         solver.SetVector(P_Color, new Color(delta.x, delta.y, 0, 0));
         solver.SetFloat(P_Radius, CorrectRadius(config.SPLAT_RADIUS / 100f));
@@ -182,10 +198,8 @@ public class Solver : System.IDisposable {
         }
     }
     public float CorrectRadius(float radius) {
-        var screenSize = GetScreenSize();
-        var aspectRatio = screenSize.x / (float)screenSize.y;
-        if (aspectRatio > 1)
-            radius *= aspectRatio;
+        if (currTargetAspect > 1)
+            radius *= currTargetAspect;
         return radius;
     }
     public static Color GenerateColor(Random rand) {
@@ -214,9 +228,6 @@ public class Solver : System.IDisposable {
             case 4: return new Color(t, p, v);
             default: return new Color(v, p, q);
         }
-    }
-    public static int2 GetScreenSize() {
-        return new int2(Screen.width, Screen.height);
     }
 
     #region IDisposable
