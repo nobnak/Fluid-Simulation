@@ -8,7 +8,7 @@ using UnityEngine;
 using Random = Unity.Mathematics.Random;
 
 
-public class Pointers {
+public class Pointers : System.IDisposable {
 
     protected float colorUpdateTimer;
     protected Random rand;
@@ -46,7 +46,7 @@ public class Pointers {
         if (colorUpdateTimer >= 1) {
             colorUpdateTimer = math.frac(colorUpdateTimer);
             foreach (var pointer in pointers) {
-                pointer.color = Solver.GenerateColor(rand);
+                pointer.color = Solver.GenerateColor(ref rand);
             }
         }
     }
@@ -57,7 +57,7 @@ public class Pointers {
         pointer.texcoord = texcoord;
         pointer.prevTexcoord = pointer.texcoord;
         pointer.delta = float2.zero;
-        pointer.color = Solver.GenerateColor(rand);
+        pointer.color = Solver.GenerateColor(ref rand);
     }
     public void UpdatePointerMoveData(Pointer pointer, float2 texcoord) {
         pointer.prevTexcoord = pointer.texcoord;
@@ -70,6 +70,12 @@ public class Pointers {
         pointer.down = false;
     }
 
+    #region idisposable
+    public void Dispose() {
+        pointers.Clear();
+    }
+    #endregion
+
     #region listeners
     public void ListenMouseMove(float2 texcoord, int id = -1) {
         var pointer = pointers.FirstOrDefault(pointers => pointers.id == id);
@@ -79,14 +85,14 @@ public class Pointers {
         }
     }
 
-    private void ListenMouseUp(int id = -1) {
+    public void ListenMouseUp(int id = -1) {
         var pointer = pointers.FirstOrDefault(pointers => pointers.id == id);
         if (pointer != null) {
             UpdatePointerUpData(pointer);
         }
     }
 
-    private void ListenMouseDown(float2 texcoord, int id = -1) {
+    public void ListenMouseDown(float2 texcoord, int id = -1) {
         var pointer = pointers.FirstOrDefault(pointers => pointers.id == id);
         if (pointer == null) {
             pointer = new Pointer();

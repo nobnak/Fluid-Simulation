@@ -188,7 +188,7 @@ public class Solver : System.IDisposable {
     }
     public void MultipleSplats(int amount) {
         for (var i = 0; i < amount; i++) {
-            var c = GenerateColor(rand);
+            var c = GenerateColor(ref rand);
             c.r *= 10f;
             c.g *= 10f;
             c.b *= 10f;
@@ -202,7 +202,7 @@ public class Solver : System.IDisposable {
             radius *= currTargetAspect;
         return radius;
     }
-    public static Color GenerateColor(Random rand) {
+    public static Color GenerateColor(ref Random rand) {
         var c = HSVToRGB(new float3(rand.NextFloat(), 1, 1));
         c.r *= 0.15f;
         c.g *= 0.15f;
