@@ -21,7 +21,9 @@ public abstract class SolverMonoBase<T> : MonoBehaviour
 
     #region unity
     protected virtual void OnEnable() {
-        solver = new(CurrSolverConfig);
+        if (TryGetScreenSize(out var screenSize))
+            InitAllTextures(screenSize);
+        solver = new(CurrSolverConfig, target);
 
         rand = new Random((uint)GetInstanceID());
         lastUpdateTime = Time.time;
@@ -41,17 +43,7 @@ public abstract class SolverMonoBase<T> : MonoBehaviour
         if (TryGetScreenSize(out int2 screenSize)) {
             if (target == null || screenSize.x != target.width || screenSize.y != target.height) {
                 DisposeAllTextures();
-
-                var format = DefaultFormat.HDR;
-                target = new RenderTexture(screenSize.x, screenSize.y, 0, format);
-                target.hideFlags = HideFlags.DontSave;
-                target.filterMode = FilterMode.Bilinear;
-                target.wrapMode = TextureWrapMode.Clamp;
-                target.anisoLevel = 0;
-                target.useMipMap = false;
-                debugOutTex = new RenderTexture(target.descriptor);
-                debugOutTex.hideFlags = HideFlags.DontSave;
-
+                InitAllTextures(screenSize);
                 if (solver != null)
                     solver.CurrTarget = target;
             }
@@ -79,11 +71,22 @@ public abstract class SolverMonoBase<T> : MonoBehaviour
     #endregion
 
     #region methods
-    protected float CalcDeltaTime() {
+    protected virtual float CalcDeltaTime() {
         var tnow = Time.time;
         var dt = tnow - lastUpdateTime;
         lastUpdateTime = tnow;
         return dt;
+    }
+    protected virtual void InitAllTextures(int2 screenSize) {
+        var format = DefaultFormat.HDR;
+        target = new RenderTexture(screenSize.x, screenSize.y, 0, format);
+        target.hideFlags = HideFlags.DontSave;
+        target.filterMode = FilterMode.Bilinear;
+        target.wrapMode = TextureWrapMode.Clamp;
+        target.anisoLevel = 0;
+        target.useMipMap = false;
+        debugOutTex = new RenderTexture(target.descriptor);
+        debugOutTex.hideFlags = HideFlags.DontSave;
     }
     protected virtual void DisposeAllTextures() {
         if (target != null) {
