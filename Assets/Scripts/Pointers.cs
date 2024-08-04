@@ -23,34 +23,6 @@ public class Pointers {
     }
 
     public void Update(float dt) {
-        if (Input.GetMouseButtonDown(0)) {
-            var pos = Input.mousePosition;
-            var screenSize = Solver.GetScreenSize();
-            var texcoord = new float2(pos.x / screenSize.x, 1 - pos.y / screenSize.y);
-            var pointer = pointers.FirstOrDefault(pointers => pointers.id == -1);
-            if (pointer == null) {
-                pointer = new Pointer();
-                pointers.Add(pointer);
-            }
-            UpdatePointerDownData(pointer, -1, texcoord);
-        }
-        if (Input.GetMouseButtonUp(0)) {
-            var pointer = pointers.FirstOrDefault(pointers => pointers.id == -1);
-            if (pointer != null) {
-                UpdatePointerUpData(pointer);
-            }
-        }
-        if (Input.GetMouseButton(0)) {
-            var pointer = pointers.FirstOrDefault(pointers => pointers.id == -1);
-            if (pointer != null) {
-                if (!pointer.down) return;
-                var pos = Input.mousePosition;
-                var screenSize = Solver.GetScreenSize();
-                var texcoord = new float2(pos.x / screenSize.x, 1 - pos.y / screenSize.y);
-                UpdatePointerMoveData(pointer, texcoord);
-            }
-        }
-
         ApplyInputs(); 
         UpdateColors(dt);
     }
@@ -98,6 +70,33 @@ public class Pointers {
         pointer.down = false;
     }
 
+    #region listeners
+    public void ListenMouseMove(float2 texcoord, int id = -1) {
+        var pointer = pointers.FirstOrDefault(pointers => pointers.id == id);
+        if (pointer != null) {
+            if (!pointer.down) return;
+            UpdatePointerMoveData(pointer, texcoord);
+        }
+    }
+
+    private void ListenMouseUp(int id = -1) {
+        var pointer = pointers.FirstOrDefault(pointers => pointers.id == id);
+        if (pointer != null) {
+            UpdatePointerUpData(pointer);
+        }
+    }
+
+    private void ListenMouseDown(float2 texcoord, int id = -1) {
+        var pointer = pointers.FirstOrDefault(pointers => pointers.id == id);
+        if (pointer == null) {
+            pointer = new Pointer();
+            pointers.Add(pointer);
+        }
+        UpdatePointerDownData(pointer, -1, texcoord);
+    }
+    #endregion
+
+    #region declarations
     public class Pointer {
 
         public int id = -1;
@@ -121,4 +120,5 @@ public class Pointers {
         //    this.color = [30, 0, 300];
         //}
     }
+    #endregion
 }
